@@ -7,7 +7,10 @@ import (
 )
 
 type PathConf struct {
+	// base_model 项目的目录
 	BaseModel string `yaml:"base_model"`
+	// 目标目录
+	TargetFiles []string `yaml:"target_files"`
 }
 
 func (c *PathConf) GetPathConf() *PathConf {
