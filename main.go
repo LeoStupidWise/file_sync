@@ -40,7 +40,7 @@ func doCopy()  {
 	// 注意，目标目录有，而源目录没有的文件，要予以在目标目录进行删除
 
 	// 获取源目录的所有文件
-	var originPathAll []string
+	var originPathAll []config.DirInfo
 	originPathAll = GetAllFileWithRelativePath(pathConfig.BaseModel)
 
 	// 获取目标目录的所有文件
@@ -60,14 +60,14 @@ func doCopy()  {
 		for j := range targetPathAll[i].Dirs {
 			var inOrigin = false
 			for o := range originPathAll{
-				if originPathAll[o] == targetPathAll[i].Dirs[j] {
+				if originPathAll[o].Path == targetPathAll[i].Dirs[j].Path {
 					inOrigin = true
 					break
 				}
 			}
 			if !inOrigin {
 				// 不在源目录中，删除
-				redundantPath := targetPathAll[i].BaseDir + targetPathAll[i].Dirs[j]
+				redundantPath := targetPathAll[i].BaseDir + targetPathAll[i].Dirs[j].Path
 				fmt.Println(chalk.Red, dateNow + "，删除目录：" + redundantPath, chalk.ResetColor)
 				_ = os.RemoveAll(redundantPath)
 			}
@@ -75,48 +75,81 @@ func doCopy()  {
 	}
 	// 循环源目录，一一和目标目录进行比对，如果有文件名和修改时间相同，则不用复制，其他视情况需要复制就复制
 	for originIndex := range originPathAll{
-		originPath := originPathAll[originIndex]
+		originPath := originPathAll[originIndex].Path
 		for targetIndex := range targetPathAll {
 			// 源目录，是否存在于目标目录中
 			isExistTargetPath := false
+			updatedTheSame := true
 			for targetPathIndex := range targetPathAll[targetIndex].Dirs {
-				if originPath == targetPathAll[targetIndex].Dirs[targetPathIndex] {
+				if originPath == targetPathAll[targetIndex].Dirs[targetPathIndex].Path {
 					isExistTargetPath = true
+					if originPathAll[originIndex].UpdatedAt != targetPathAll[targetIndex].Dirs[targetPathIndex].UpdatedAt {
+						updatedTheSame = false
+					}
+					break
 				}
 			}
 			targetPath := targetPathAll[targetIndex].BaseDir + originPath
+			originAbsolutePath := pathConfig.BaseModel + originPathAll[originIndex].Path
 			if !isExistTargetPath {
-				fmt.Println(chalk.Green, dateNow + "，新增目录：" + targetPath, chalk.ResetColor)
+				if originPathAll[originIndex].IsDir {
+					fmt.Println(chalk.Green, dateNow + "，创建文件夹：" + targetPath, chalk.ResetColor)
+					_ = os.Mkdir(targetPath, 777)
+				} else {
+					fmt.Println(chalk.Green, dateNow + "，新建文件：" + targetPath, chalk.ResetColor)
+					copyFile(originAbsolutePath, targetPath)
+				}
 			} else {
 				// 存在相同目录，比较修改时间
+				if !originPathAll[originIndex].IsDir {
+					// 文件夹不去管，只管文件
+					if !updatedTheSame {
+						// 更新时间不同，再复制
+						fmt.Println(chalk.Yellow, dateNow + "，覆盖文件：" + targetPath, chalk.ResetColor)
+						_ = os.Remove(targetPath)
+						copyFile(originAbsolutePath, targetPath)
+					}
+				}
 			}
 		}
 	}
 }
 
-func GetAllFiles(dir string) []string {
+func GetAllFiles(dir string) []config.DirInfo {
 	// 获取一个目录下的所有文件
-	var originPathAll [] string
+	// 在这里不仅要拿到文件名，还要拿到是否是目录、修改时间等信息，方便后面做处理
+	var originPathAll [] config.DirInfo
 	fileInfoList, _ := ioutil.ReadDir(dir)
 	for i := range fileInfoList {
-		dirNow := dir + "\\" + fileInfoList[i].Name()
-		originPathAll = append(originPathAll, dirNow)
+		var dirInfo config.DirInfo
+		dirInfo.Path = dir + "\\" + fileInfoList[i].Name()
+		dirInfo.IsDir = fileInfoList[i].IsDir()
+		dirInfo.UpdatedAt = fileInfoList[i].ModTime()
+		originPathAll = append(originPathAll, dirInfo)
 		if fileInfoList[i].IsDir() {
-			originPathAll = append(GetAllFiles(dirNow), originPathAll...)
+			originPathAll = append(GetAllFiles(dirInfo.Path), originPathAll...)
 		}
 	}
 	return originPathAll
 }
 
-func AbPathToRelativePath(dirs []string, baseDir string) []string {
-	// 绝对地址，变成相对地址
+func AbPathToRelativePath(dirs []config.DirInfo, baseDir string) []config.DirInfo {
+	// 绝对地址，变成相对地址，且将文件夹放到前面
+	var result []config.DirInfo
 	for i := range dirs {
-		dirs[i] = strings.Replace(dirs[i], baseDir, "", 1)
+		dirs[i].Path = strings.Replace(dirs[i].Path, baseDir, "", 1)
+		if dirs[i].IsDir {
+			// 如果是文件夹，放在最前面
+			result = append([]config.DirInfo{dirs[i]}, result...)
+		} else {
+			// 如果是文件的话，放到最后面
+			result = append(result, []config.DirInfo{dirs[i]}...)
+		}
 	}
-	return dirs
+	return result
 }
 
-func GetAllFileWithRelativePath(dir string) []string {
+func GetAllFileWithRelativePath(dir string) []config.DirInfo {
 	// 以相对地址的方式获得所有目录
 	dirs := GetAllFiles(dir)
 	dirs = AbPathToRelativePath(dirs, dir)
@@ -127,30 +160,8 @@ func GetAllFileWithRelativePath(dir string) []string {
 测试方法
  */
 func copyFile(baseDir string, targetDir string) {
-	fileInfoList, _ := ioutil.ReadDir(baseDir)
-	for i := range fileInfoList {
-		originDirNow := baseDir+"\\"+fileInfoList[i].Name()
-		targetDirNow := targetDir+"\\"+fileInfoList[i].Name()
-		copyFile(originDirNow, targetDirNow)
-		// 如果是目录
-		if fileInfoList[i].IsDir() {
-			// 目标地址不存在这个目录
-			targetFileExist, _ := PathExists(targetDirNow)
-			if !targetFileExist {
-				// 目标目录中不存在对应文件夹，先创建这个文件夹
-				err := os.MkdirAll(targetDir, 777)
-				if err != nil {
-					fmt.Println( err)
-				}
-			}
-		} else {
-			//
-		}
-		//fmt.Println(reflect.TypeOf(fileInfoList[i]))
-		//fmt.Println(fileInfoList[i].Name())
-		//fmt.Println(fileInfoList[i].ModTime().Unix())
-	}
-	fmt.Println("=================" + targetDir)
+	input, _ := ioutil.ReadFile(baseDir)
+	_ = ioutil.WriteFile(targetDir, input, 0644)
 }
 
 /**
