@@ -2,18 +2,36 @@ package main
 
 import (
 	"fmt"
+	"github.com/robfig/cron/v3"
+	"github.com/ttacon/chalk"
 	"io/ioutil"
 	"os"
+	"strings"
 	"sync_tool/config"
+	"time"
 )
 
 func main()  {
+	// 保持控制台不关闭
+	//_,_ = fmt.Scanf("a")
+	fmt.Println(chalk.Green, GetTimeNow() + "，开始同步监听", chalk.ResetColor)
 	var pathConfig config.PathConf
 	pathConfig.GetPathConf()
-	//for i := range pathConfig.TargetFiles {
-	//	//originPathAll = append(originPathAll, GetAllFiles(originPathAll, pathConfig.TargetFiles[i])...)
-	//	GetAllFiles(originPathAll, pathConfig.TargetFiles[i])
-	//}
+	c := cron.New()
+	_,_ = c.AddFunc(pathConfig.Cron, doCopy)
+	c.Start()
+	select {}
+}
+
+func GetTimeNow() string {
+	return time.Now().Format("2006-01-02 15:04:05")
+}
+
+func doCopy()  {
+	// golang 中必须使用下面这个时间才行
+	dateNow := GetTimeNow()
+	var pathConfig config.PathConf
+	pathConfig.GetPathConf()
 	// 同步策略
 	// 按照下面的格式获取源目录下所有文件（没有 . 后缀的就是文件夹）
 	// 目录名 + 文件全名 + 文件修改时间
@@ -23,31 +41,57 @@ func main()  {
 
 	// 获取源目录的所有文件
 	var originPathAll []string
-	originPathAll = GetAllFiles(pathConfig.BaseModel)
-	for i := range originPathAll {
-		fmt.Println(originPathAll[i])
-	}
+	originPathAll = GetAllFileWithRelativePath(pathConfig.BaseModel)
 
 	// 获取目标目录的所有文件
-	// 这里想要搞一个二维数组，一直没搞出来
-	fmt.Println("打印目标目录")
-	targetPathLen := len(pathConfig.TargetFiles)
-	var targetPathAll [][]string
+	// 这里保存目标目录的详情
+	var targetPathAll [] config.TargetDir
 	for i := range pathConfig.TargetFiles {
-		tem := GetAllFiles( pathConfig.TargetFiles[i])
+		tem := GetAllFileWithRelativePath(pathConfig.TargetFiles[i])
+		var targetDir config.TargetDir
+		targetDir.BaseDir = pathConfig.TargetFiles[i]
 		if tem != nil {
-			targetPathAll = append(targetPathAll[i], tem...)
+			targetDir.Dirs = append(targetDir.Dirs, tem...)
+		}
+		targetPathAll = append(targetPathAll, targetDir)
+	}
+	// 循环所有目标目录，一一个源目录就行比对，不在源目录中的，则删除
+	for i := range targetPathAll {
+		for j := range targetPathAll[i].Dirs {
+			var inOrigin = false
+			for o := range originPathAll{
+				if originPathAll[o] == targetPathAll[i].Dirs[j] {
+					inOrigin = true
+					break
+				}
+			}
+			if !inOrigin {
+				// 不在源目录中，删除
+				redundantPath := targetPathAll[i].BaseDir + targetPathAll[i].Dirs[j]
+				fmt.Println(chalk.Red, dateNow + "，删除目录：" + redundantPath, chalk.ResetColor)
+				_ = os.RemoveAll(redundantPath)
+			}
 		}
 	}
-
-	// 所有目录都是绝对地址，需要转换成相对地址，这样才能以源目录和目标目录 2 个不同的目录为根目录来比对文件的异同
-
 	// 循环源目录，一一和目标目录进行比对，如果有文件名和修改时间相同，则不用复制，其他视情况需要复制就复制
-
-	// 循环所有目标目录，一一个源目录就行比对，不在源目录中的，则删除
-
-	// 保持控制台不关闭
-	_,_ = fmt.Scanf("a")
+	for originIndex := range originPathAll{
+		originPath := originPathAll[originIndex]
+		for targetIndex := range targetPathAll {
+			// 源目录，是否存在于目标目录中
+			isExistTargetPath := false
+			for targetPathIndex := range targetPathAll[targetIndex].Dirs {
+				if originPath == targetPathAll[targetIndex].Dirs[targetPathIndex] {
+					isExistTargetPath = true
+				}
+			}
+			targetPath := targetPathAll[targetIndex].BaseDir + originPath
+			if !isExistTargetPath {
+				fmt.Println(chalk.Green, dateNow + "，新增目录：" + targetPath, chalk.ResetColor)
+			} else {
+				// 存在相同目录，比较修改时间
+			}
+		}
+	}
 }
 
 func GetAllFiles(dir string) []string {
@@ -62,6 +106,21 @@ func GetAllFiles(dir string) []string {
 		}
 	}
 	return originPathAll
+}
+
+func AbPathToRelativePath(dirs []string, baseDir string) []string {
+	// 绝对地址，变成相对地址
+	for i := range dirs {
+		dirs[i] = strings.Replace(dirs[i], baseDir, "", 1)
+	}
+	return dirs
+}
+
+func GetAllFileWithRelativePath(dir string) []string {
+	// 以相对地址的方式获得所有目录
+	dirs := GetAllFiles(dir)
+	dirs = AbPathToRelativePath(dirs, dir)
+	return dirs
 }
 
 /**
@@ -91,9 +150,7 @@ func copyFile(baseDir string, targetDir string) {
 		//fmt.Println(fileInfoList[i].Name())
 		//fmt.Println(fileInfoList[i].ModTime().Unix())
 	}
-
 	fmt.Println("=================" + targetDir)
-
 }
 
 /**

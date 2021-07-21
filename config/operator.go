@@ -11,6 +11,8 @@ type PathConf struct {
 	BaseModel string `yaml:"base_model"`
 	// 目标目录
 	TargetFiles []string `yaml:"target_files"`
+	// 定时规则
+	Cron string `yaml:"cron"`
 }
 
 func (c *PathConf) GetPathConf() *PathConf {
@@ -24,4 +26,10 @@ func (c *PathConf) GetPathConf() *PathConf {
 		log.Fatalf("Unmarshal: %v", err)
 	}
 	return c
+}
+
+type TargetDir struct {
+	// 根目录
+	BaseDir string
+	Dirs [] string
 }

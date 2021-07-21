@@ -1,3 +1,6 @@
 base_model: D:\codes\golang\测试文件夹
 target_files:
   - D:\codes\golang\测试-目标文件夹
+  - D:\codes\golang\测试-目标文件夹2
+# 配置同步间隔，@every 10s：10 秒同步一次
+cron: "@every 10s"
