@@ -75,39 +75,41 @@ func doCopy()  {
 	}
 	// 循环源目录，一一和目标目录进行比对，如果有文件名和修改时间相同，则不用复制，其他视情况需要复制就复制
 	for originIndex := range originPathAll{
-		originPath := originPathAll[originIndex].Path
+		originFile := originPathAll[originIndex]
 		for targetIndex := range targetPathAll {
 			// 源目录，是否存在于目标目录中
 			isExistTargetPath := false
 			updatedTheSame := true
 			for targetPathIndex := range targetPathAll[targetIndex].Dirs {
-				if originPath == targetPathAll[targetIndex].Dirs[targetPathIndex].Path {
+				if originFile.Path == targetPathAll[targetIndex].Dirs[targetPathIndex].Path {
 					isExistTargetPath = true
-					if originPathAll[originIndex].UpdatedAt != targetPathAll[targetIndex].Dirs[targetPathIndex].UpdatedAt {
+					if originFile.UpdatedAt != targetPathAll[targetIndex].Dirs[targetPathIndex].UpdatedAt {
 						updatedTheSame = false
 					}
 					break
 				}
 			}
-			targetPath := targetPathAll[targetIndex].BaseDir + originPath
-			originAbsolutePath := pathConfig.BaseModel + originPathAll[originIndex].Path
+			targetPath := targetPathAll[targetIndex].BaseDir + originFile.Path
+			originAbsolutePath := pathConfig.BaseModel + originFile.Path
 			if !isExistTargetPath {
-				if originPathAll[originIndex].IsDir {
+				if originFile.IsDir {
 					fmt.Println(chalk.Green, dateNow + "，创建文件夹：" + targetPath, chalk.ResetColor)
 					_ = os.Mkdir(targetPath, 777)
 				} else {
 					fmt.Println(chalk.Green, dateNow + "，新建文件：" + targetPath, chalk.ResetColor)
 					copyFile(originAbsolutePath, targetPath)
+					// 改变目标目录的修改时间，因为是以比对修改时间是否一致来判断 2 个文件是否一样
+					_ = os.Chtimes(targetPath, originFile.UpdatedAt, originFile.UpdatedAt)
 				}
 			} else {
 				// 存在相同目录，比较修改时间
-				if !originPathAll[originIndex].IsDir {
+				if !originFile.IsDir {
 					// 文件夹不去管，只管文件
 					if !updatedTheSame {
 						// 更新时间不同，再复制
 						fmt.Println(chalk.Yellow, dateNow + "，覆盖文件：" + targetPath, chalk.ResetColor)
-						_ = os.Remove(targetPath)
 						copyFile(originAbsolutePath, targetPath)
+						_ = os.Chtimes(targetPath, originFile.UpdatedAt, originFile.UpdatedAt)
 					}
 				}
 			}
