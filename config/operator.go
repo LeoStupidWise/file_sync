@@ -17,7 +17,7 @@ type PathConf struct {
 }
 
 func (c *PathConf) GetPathConf() *PathConf {
-	yamlFile, err := ioutil.ReadFile("config/path.yaml")
+	yamlFile, err := ioutil.ReadFile("path.yaml")
 	if err != nil {
 		log.Printf("yamlFile.Get err   #%v ", err)
 	}

@@ -1,0 +1,7 @@
+base_model: D:\codes\wan\wan-src\vendor\wan\src
+target_files:
+  - D:\codes\wan\wshifu-ocs-master\vendor\wan\src
+  - D:\codes\wan\wshifu-ocs-user\vendor\wan\src
+# - D:\codes\golang\测试-目标文件夹2
+# 配置同步间隔，@every 10s：10 秒同步一次
+cron: "@every 3s"
